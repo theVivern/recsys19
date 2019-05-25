@@ -28,9 +28,10 @@ def load_sessions(path: Path, nrows: int = None):
     return df
 
 
-def load_metadata(path: Path):
+def load_metadata(path: Path, nrows: int = None):
     df = pd.read_csv( str(path),
         header=0,
+        nrows = nrows,
         dtype={
         })
 
@@ -44,11 +45,47 @@ def load_dataset(nrows: int = None):
 
     return df_train, df_test, df_meta
 
-df_train = load_sessions(data_dir / 'train.csv', 1000)
-df_meta = load_metadata(data_dir / 'item_metadata.csv')
+# df_train = load_sessions(data_dir / 'train.csv', 1000)
+df_meta = load_metadata(data_dir / 'item_metadata.csv', 1000)
+
+
+# %%
+from sklearn.preprocessing import MultiLabelBinarizer, FunctionTransformer
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline, TransformerMixin
+from sklearn.base import BaseEstimator
+
+
+class MetadataEncoder(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        self.encoder = MultiLabelBinarizer()
+
+    def _split(self, x):
+        return x.str.split('|')
+
+    def fit(self, x, *unused):
+        x = self._split(x.properties)
+        self.encoder.fit(x)
+        return self
+
+    def transform(self, x, *unused):
+        # Classes
+        out = self._split(x.properties)
+        out = self.encoder.transform(out)
+
+        return pd.DataFrame(
+            data=np.concatenate(
+                (x.item_id[:, None], out),
+                axis=1),
+            columns=['item_id'] + list(self.encoder.classes_)
+        )
+
+
+meta_pipe = MetadataEncoder()
+meta_pipe.fit(df_meta)
+tmp = meta_pipe.transform(df_meta)
 
 
 
 
-#%% Data preprocessing pipelines
-# sessions_pipe =
+#%%
