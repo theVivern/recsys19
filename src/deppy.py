@@ -238,8 +238,10 @@ class Generator:
         generate(self.needs)
 
         # Run the user function
-        self.create_function(*args, **kwargs)
+        result = self.create_function(*args, **kwargs)
 
         # Make sure the user supplied function actually generated the files
         self.validate_outputs_exist()
+
+        return result
 

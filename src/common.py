@@ -10,13 +10,22 @@ from sklearn_pandas import DataFrameMapper
 import gc
 
 
-# %% Important project paths
+# Important project paths
 root_dir = Path().resolve()
 data_dir = root_dir / 'data'
 cache_dir = root_dir / 'cache'
 
+data_meta_path = cache_dir / 'data_meta.h5'
+data_sessions_full_path = cache_dir / 'data_sessions_full.h5'
+data_sessions_small_path = cache_dir / 'data_sessions_small.h5'
 
-# %% Create special directories if the don't exist
+
+import sys
+sys.path.append(str(root_dir / 'src'))
+import deppy
+
+
+# %% Create special directories if they don't exist
 cache_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -46,7 +55,8 @@ class MetadataEncoder(BaseEstimator, TransformerMixin):
         )
 
 
-def load_metadata(path: Path = None, nrows: int = None):
+@deppy.generator(creates=data_meta_path)
+def _preprocess_metadata(path: Path = None, nrows: int = None):
     if path is None:
         path = data_dir / 'item_metadata.csv'
 
@@ -62,15 +72,23 @@ def load_metadata(path: Path = None, nrows: int = None):
     pipe = MetadataEncoder()
     df = pipe.fit_transform(df)
 
-    return df
+    df.to_hdf(
+        data_meta_path,
+        'data_meta'
+    )
 
-data_meta = load_metadata()
-print(f'Loaded {len(data_meta)} rows of metadata')
+
+@deppy.generator(needs=data_meta_path)
+def get_metadata():
+    result = pd.read_hdf(data_meta_path)
+    print(f'Loaded {len(result)} rows of metadata')
+    return result
 
 
 # %% Load the sessions
 
-# Free up memory
+# This is very memory intensive. Free previous results to avoid using twice as
+# much.
 try:
     del data_sessions
 except NameError:
@@ -79,32 +97,25 @@ else:
     gc.collect()
 
 
-def load_session_data(path: Path, nrows: int = None):
-    df = pd.read_csv( str(path),
+def _read_sessions_csv(csv_path: Path) -> pd.DataFrame:
+    df = pd.read_csv(
+        csv_path,
         header=0,
-        nrows=nrows,
         dtype={
             'timestamp': np.int64
         })
 
     return df
 
-
-# LabelEncoders for label columns
-label_columns = [
-    'user_id', 'session_id',
-    'action_type', 'platform', 'city', 'device'
-]
-
-label_columns = {
-    k: LabelEncoder() for k in label_columns
-}
-
-
-def load_sessions(nrows: int = None):
+def _preprocess_sessions_shared(use_subset: bool, out_path: Path):
     # Load the data
-    data_train = load_session_data(data_dir / 'train.csv', nrows=nrows)
-    data_test = load_session_data(data_dir / 'test.csv', nrows=nrows)
+    data_train = _read_sessions_csv(data_dir / 'train.csv')
+    data_test = _read_sessions_csv(data_dir / 'test.csv')
+
+    # TODO: Honor the `use_subset` parameter properly
+    if use_subset:
+        data_train = data_train.head(50000)
+        data_test = data_test.head(50000)
 
     # Merge the dataframes
     data_train['is_train'] = True
@@ -136,12 +147,60 @@ def load_sessions(nrows: int = None):
 
         data[colname] = col
 
-    return data
+    # Dump the preprocessed data as CSV
+    data.to_hdf(
+        out_path,
+        'data_sessions'
+    )
 
 
-data_sessions = load_sessions()
-print(f'Loaded {len(data_sessions)} rows of session data')
-n_bytes = data_sessions.memory_usage().sum()
-print(f'Session data is using {n_bytes/1e6:.2f}MB')
+@deppy.generator(creates=data_sessions_full_path)
+def _preprocess_sessions_full():
+    _preprocess_sessions_shared(
+        False,
+        data_sessions_full_path
+    )
 
 
+@deppy.generator(creates=data_sessions_small_path)
+def _preprocess_sessions_small():
+    _preprocess_sessions_shared(
+        True,
+        data_sessions_small_path
+    )
+
+
+def get_sessions_data(use_subset: bool):
+    # Determine the path to the cached file
+    if use_subset:
+        path = data_sessions_small_path
+    else:
+        path = data_sessions_full_path
+
+    # Ensure it exists
+    deppy.generate(path)
+
+    # Load it
+    result = pd.read_hdf(path)
+
+    # Print statistics
+    n_bytes = result.memory_usage().sum()
+    print(f'Loaded {len(result)} rows of session data ({n_bytes/1e6:.2f}MB)')
+
+    return result
+
+
+# LabelEncoders for label columns
+label_columns = [
+    'user_id', 'session_id',
+    'action_type', 'platform', 'city', 'device'
+]
+
+
+label_columns = {
+    k: LabelEncoder() for k in label_columns
+}
+
+
+
+#%%
