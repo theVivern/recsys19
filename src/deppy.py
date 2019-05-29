@@ -76,6 +76,12 @@ def generator(
         creates: Pathlist = None,
         check_time: bool = True):
 
+    """
+    Decorator: Functions decorated with this can specify needed as well as
+    created files. Whenever the function is called Deppy ensures that all needed
+    files exist by calling the appropriate other decorators.
+    """
+
     def decorator(func: callable):
         return Generator(
             needs,
@@ -88,6 +94,10 @@ def generator(
 
 
 def toposort(generator: 'Generator'):
+    """
+    Returns a topological sorting of the generator and all it's dependencies.
+    """
+
     result = []
     to_do = [generator]
     visiting = []
@@ -121,7 +131,7 @@ def toposort(generator: 'Generator'):
 
 
 def generate(paths: Pathlist):
-    """ Ensures that all given files exist, regenerating them if necessary """
+    """ Ensures that all given files exist, generating them if necessary """
     paths = as_pathlist(paths)
 
     for path in paths:
@@ -141,7 +151,6 @@ def generate(paths: Pathlist):
 
                 # Make sure the user supplied function actually generated the files
                 gen.validate_outputs_exist()
-
 
 
 class Generator:
@@ -190,7 +199,10 @@ class Generator:
         if self.check_time:
             newest_need_time = None
             for path in self.needs:
-                file_mtime = path.stat().st_mtime
+                try:
+                    file_mtime = path.stat().st_mtime
+                except FileNotFoundError:
+                    pass
 
                 if newest_need_time is None:
                     newest_need_time = file_mtime
@@ -199,15 +211,17 @@ class Generator:
 
             if newest_need_time is not None:
                 for path in self.creates:
-                    if path.stat().st_mtime < newest_need_time:
-                        add(path, 'out of date')
+                    try:
+                        if path.stat().st_mtime < newest_need_time:
+                            add(path, 'out of date')
+                    except FileNotFoundError:
+                        pass
 
         return result
 
-    def outputs_exist(self):
-        return all(map(Path.exists, self.creates))
-
     def validate_outputs_exist(self):
+        """ Ensures all outputs exist, raising a DeppyError otherwise """
+
         for path in self.creates:
             if not path.exists():
                 raise DeppyError(
