@@ -55,8 +55,8 @@ class MetadataEncoder(BaseEstimator, TransformerMixin):
         )
 
 
-@deppy.generator(creates=data_meta_path)
-def _preprocess_metadata(path: Path = None, nrows: int = None):
+@deppy.cache(cache_dir=cache_dir)
+def get_metadata(path: Path = None, nrows: int = None):
     if path is None:
         path = data_dir / 'item_metadata.csv'
 
@@ -72,17 +72,9 @@ def _preprocess_metadata(path: Path = None, nrows: int = None):
     pipe = MetadataEncoder()
     df = pipe.fit_transform(df)
 
-    df.to_hdf(
-        data_meta_path,
-        'data_meta'
-    )
+    print(f'Loaded {len(df)} rows of metadata')
 
-
-@deppy.generator(needs=data_meta_path)
-def get_metadata():
-    result = pd.read_hdf(data_meta_path)
-    print(f'Loaded {len(result)} rows of metadata')
-    return result
+    return df
 
 
 # %% Load the sessions
@@ -107,7 +99,8 @@ def _read_sessions_csv(csv_path: Path) -> pd.DataFrame:
 
     return df
 
-def _preprocess_sessions_shared(use_subset: bool, out_path: Path):
+@deppy.cache(cache_dir=cache_dir)
+def get_sessions(use_subset: bool):
     # Load the data
     data_train = _read_sessions_csv(data_dir / 'train.csv')
     data_test = _read_sessions_csv(data_dir / 'test.csv')
@@ -147,47 +140,11 @@ def _preprocess_sessions_shared(use_subset: bool, out_path: Path):
 
         data[colname] = col
 
-    # Dump the preprocessed data as CSV
-    data.to_hdf(
-        out_path,
-        'data_sessions'
-    )
-
-
-@deppy.generator(creates=data_sessions_full_path)
-def _preprocess_sessions_full():
-    _preprocess_sessions_shared(
-        False,
-        data_sessions_full_path
-    )
-
-
-@deppy.generator(creates=data_sessions_small_path)
-def _preprocess_sessions_small():
-    _preprocess_sessions_shared(
-        True,
-        data_sessions_small_path
-    )
-
-
-def get_sessions_data(use_subset: bool):
-    # Determine the path to the cached file
-    if use_subset:
-        path = data_sessions_small_path
-    else:
-        path = data_sessions_full_path
-
-    # Ensure it exists
-    deppy.generate(path)
-
-    # Load it
-    result = pd.read_hdf(path)
-
     # Print statistics
-    n_bytes = result.memory_usage().sum()
-    print(f'Loaded {len(result)} rows of session data ({n_bytes/1e6:.2f}MB)')
+    n_bytes = data.memory_usage().sum()
+    print(f'Loaded {len(data)} rows of session data ({n_bytes/1e6:.2f}MB)')
 
-    return result
+    return data
 
 
 # LabelEncoders for label columns

@@ -20,8 +20,10 @@
 
 
 from typing import Iterable, Union
+import pickle
 from pathlib import Path
 import time
+import hashlib
 
 
 Pathlike = Union[str, Path]
@@ -44,204 +46,79 @@ def as_pathlist(raw: Pathlist):
     ]
 
 
-# List of all Generator objects
-generators = []
+def deppy_hash(value, max_depth=3) -> int:
+    if max_depth < 0:
+        return 834  # Random number, no relevance
+
+    # Simple numeric types
+    if isinstance(value, (int, float, bool)):
+        return int(value * 10000)
+
+    # List-like
+    if isinstance(value, (list, tuple)):
+        accu = 744 # Random number, no relevance
+
+        for child in value:
+            accu ^= deppy_hash(child, max_depth-1)
+            accu *= 3  # Make the order of children important
+
+        return accu
+
+    # Dict
+    if isinstance(value, dict):
+        # Make sure the order _doesn't_ matter
+        accu = 427 # Random number, no relevance
+
+        for key, val in value.items():
+            accu ^= deppy_hash(key, max_depth-1)
+            accu ^= deppy_hash(val, max_depth-1)
+
+        return accu
+
+    # Strings
+    if isinstance(value, str):
+        digest = hashlib.sha1(value.encode('UTF-8')).hexdigest()
+        return int(digest, 16)
+
+    # Unhandled
+    print(f'Deppy: Warning: Cannot hash {type(value)} instance. Cached results may be invalid!')
+    return 239  # Random number, no relevance
 
 
-def find_generator_for_path(path: Path):
-    """
-    Find the appropriate generator for a path. A KeyError is raised if there
-    is no matching generator.
-    """
-
-    # This function performs a linear search over all generators. While this
-    # could be sped up using a dict this would introduce a second copy of some
-    # data. As there is likely a small number of files and generators a linear
-    # search is preferable over potentially inconsistent data.
-
-    # Paths in Generators are resolved as well, so resolve this one to ensure
-    # matches.
-    path = path.resolve()
-
-    for generator in generators:
-        if path in generator.creates:
-            return generator
-
-    raise DeppyError(
-        f'The file at {path} is listed as dependency but not provided by any generator')
-
-
-def generator(
-        needs: Pathlist = None,
-        creates: Pathlist = None,
-        check_time: bool = True):
-
-    """
-    Decorator: Functions decorated with this can specify needed as well as
-    created files. Whenever the function is called Deppy ensures that all needed
-    files exist by calling the appropriate other decorators.
-    """
+def cache(cache_dir: Path = Path(),
+        dump_function: callable = lambda obj, path: pickle.dump(obj, path.open('wb')),
+        load_function: callable = lambda path: pickle.load(path.open('rb')),
+        file_extension: str = '.pickle'):
 
     def decorator(func: callable):
-        return Generator(
-            needs,
-            creates,
-            check_time,
-            func
-        )
+
+        def load_func(*args, **kwargs):
+            arg_hash = deppy_hash(args) ^ deppy_hash(kwargs)
+            arg_hash_str = hex(arg_hash)[2:]
+
+            cache_file_name = \
+                f'deppy_cache__{func.__name__}__{arg_hash_str}{file_extension}'
+
+            cache_file_path = cache_dir / cache_file_name
+
+            # Load the cached result, if available
+            if cache_file_path.exists():
+                return load_function(cache_file_path)
+
+            # Regenerate and cache the results
+            # print(f'Deppy: Generating {path.name}')
+            result = func(*args, **kwargs)
+
+            cache_file_path.resolve().parent.mkdir(
+                parents=True, exist_ok=True
+            )
+
+            dump_function(result, cache_file_path)
+            return result
+
+        return load_func
 
     return decorator
 
 
-def toposort(generator: 'Generator'):
-    """
-    Returns a topological sorting of the generator and all it's dependencies.
-    """
-
-    result = []
-    to_do = [generator]
-    visiting = []
-    visited = set()
-
-
-    def visit(gen: Generator):
-        # Detect dependency cycles
-        if gen in visiting:
-            # TODO better error message
-            raise DeppyError('Dependency cycle')
-
-        # Mark the generator as currently visiting
-        visiting.append(gen)
-
-        # Chain to dependencies
-        for dep in gen.needs_generators():
-            visit(dep)
-
-        # Add the generator to the result, if it wasn't added by the
-        # dependencies already
-        if gen not in visited:
-            result.append(gen)
-
-        # Mark the generator as visited
-        visited.add(gen)
-
-    visit(generator)
-
-    return result
-
-
-def generate(paths: Pathlist):
-    """ Ensures that all given files exist, generating them if necessary """
-    paths = as_pathlist(paths)
-
-    for path in paths:
-        gen = find_generator_for_path(path)
-
-        # Get a topological sorting of the generators
-        order = toposort(gen)
-
-        for gen in order:
-            outdated = gen.outdated_creates()
-
-            for path, reasons in outdated.items():
-                print(f'Deppy: Generating {path.name} ({", ".join(reasons)})')
-
-            if outdated:
-                gen.create_function()
-
-                # Make sure the user supplied function actually generated the files
-                gen.validate_outputs_exist()
-
-
-class Generator:
-    def __init__(
-            self,
-            needs: Pathlist,
-            creates: Pathlist,
-            check_time: bool,
-            create_function: callable):
-
-        self.needs = as_pathlist(needs)
-        self.creates = as_pathlist(creates)
-        self.check_time = check_time
-        self.create_function = create_function
-
-        # Register the generator
-        generators.append(self)
-
-    def __hash__(self):
-        return id(self)
-
-    def outdated_creates(self):
-        """
-        Finds any outputs that need to be regenerated. The output is a
-        Dictionary mapping paths to lists of human readable reasons why
-        regeneration in necessary.
-        """
-
-        result = {}
-
-        def add(path: Path, reason: str):
-            try:
-                old = result[path]
-            except KeyError:
-                old = []
-                result[path] = old
-
-            old.append(reason)
-
-        for path in self.creates:
-            # File doesn't exist at all
-            if not path.exists():
-                add(path, 'does not exist')
-
-        # Dependencies are younger than outputs
-        if self.check_time:
-            newest_need_time = None
-            for path in self.needs:
-                try:
-                    file_mtime = path.stat().st_mtime
-                except FileNotFoundError:
-                    pass
-
-                if newest_need_time is None:
-                    newest_need_time = file_mtime
-                else:
-                    newest_need_time = min(file_mtime, newest_need_time)
-
-            if newest_need_time is not None:
-                for path in self.creates:
-                    try:
-                        if path.stat().st_mtime < newest_need_time:
-                            add(path, 'out of date')
-                    except FileNotFoundError:
-                        pass
-
-        return result
-
-    def validate_outputs_exist(self):
-        """ Ensures all outputs exist, raising a DeppyError otherwise """
-
-        for path in self.creates:
-            if not path.exists():
-                raise DeppyError(
-                    f'Generator failed to create the output file at {path}')
-
-    def needs_generators(self):
-        """ Returns the set of all generators this one depends on """
-        return set(
-            find_generator_for_path(p) for p in self.needs
-        )
-
-    def __call__(self, *args, **kwargs):
-        # Generate all dependencies
-        generate(self.needs)
-
-        # Run the user function
-        result = self.create_function(*args, **kwargs)
-
-        # Make sure the user supplied function actually generated the files
-        self.validate_outputs_exist()
-
-        return result
 
