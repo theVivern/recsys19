@@ -145,6 +145,10 @@ dataframes = {
 }
 
 
+print('Generating common CSV datafiles.')
+print(f'They are stored at {cache_dir.resolve()}')
+
+
 for name, df_generator in dataframes.items():
     print(f'Creating {name}')
 
@@ -153,10 +157,14 @@ for name, df_generator in dataframes.items():
 
     # Print statistics
     n_bytes = df.memory_usage().sum()
-    print(f'    Loaded {len(df)} rows ({n_bytes/1e6:.2f}MB)')
+    print(f'    {len(df)} rows, ({n_bytes/1e6:.2f}MB)')
 
     # Dump it
     file_name = f'{name}.csv'
     file_path = cache_dir / file_name
     df.to_csv(file_path)
 
+
+
+
+#%%
