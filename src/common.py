@@ -98,7 +98,7 @@ def _read_sessions_csv(csv_path: Path) -> pd.DataFrame:
     return df
 
 @deppy.cache(cache_dir=cache_dir)
-def get_sessions(use_subset: bool, frac_sessions: int):
+def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool, frac_for_fake: int):
     # Load the data
     data_train = _read_sessions_csv(data_dir / 'train.csv')
     data_test = _read_sessions_csv(data_dir / 'test.csv')
@@ -113,6 +113,24 @@ def get_sessions(use_subset: bool, frac_sessions: int):
         testsessionswithclickoutsorted=data_test[data_test.session_id.isin(data_test[['session_id','action_type']][data_test.action_type=='clickout item'].session_id.unique())][['session_id','timestamp','step']][data_test.step==1].sort_values('timestamp').session_id.unique()
         data_test = data_test[data_test.session_id.isin(testsessionswithclickoutsorted[0:round(len(testsessionswithclickoutsorted)*frac_sessions)])]
         
+    if split_for_fake_test:
+        trainsessionswithclickoutsorted=data_train[data_train.session_id.isin(data_train[['session_id','action_type']][data_train.action_type=='clickout item'].session_id.unique())][['session_id','timestamp','step']][data_train.step==1].sort_values('timestamp').session_id.unique()
+        data_train_x = data_train[data_train.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_for_fake)])]
+        data_train_y = data_train[data_train.session_id.isin(trainsessionswithclickoutsorted[(round(len(trainsessionswithclickoutsorted)*frac_for_fake)+1):len(trainsessionswithclickoutsorted)])]
+        
+        # add dummy switch for
+        data_train_x['fake_split_train'] = True
+        data_train_y['fake_split_train'] = False
+        data_train = pd.concat(
+            (data_train_y, data_train_x),
+            axis=0
+        )
+
+        data_test['fake_split_train'] = False
+
+        del data_train_x, data_train_y
+    
+    
     # Merge the dataframes
     data_train['is_train'] = True
     data_test['is_train'] = False
@@ -143,10 +161,16 @@ dataframes = {
         lambda: get_metadata(),
 
     'df_sessions_full':
-        lambda: get_sessions(False,1),
+        lambda: get_sessions(False,1,False,1),
+    
+    'df_sessions_full_split':
+        lambda: get_sessions(False,1,True,0.75),
 
     'df_sessions_small':
-        lambda: get_sessions(True,.05),
+        lambda: get_sessions(True,.05,False,1),
+
+    'df_sessions_small_split':
+        lambda: get_sessions(True,.05,True,0.75),
 }
 
 
