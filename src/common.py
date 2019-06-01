@@ -29,7 +29,7 @@ import deppy
 cache_dir.mkdir(parents=True, exist_ok=True)
 
 
-# %% Load the metadata
+# %% Loads the metadata
 class MetadataEncoder(BaseEstimator, TransformerMixin):
     def __init__(self):
         self.encoder = MultiLabelBinarizer()
@@ -72,12 +72,10 @@ def get_metadata(path: Path = None, nrows: int = None):
     pipe = MetadataEncoder()
     df = pipe.fit_transform(df)
 
-    print(f'Loaded {len(df)} rows of metadata')
-
     return df
 
 
-# %% Load the sessions
+# %% Loads the sessions
 
 # This is very memory intensive. Free previous results to avoid using twice as
 # much.
@@ -130,34 +128,35 @@ def get_sessions(use_subset: bool):
         utc=True
     )
 
-    # ... convert categorical strings to integers
-    for colname, encoder in label_columns.items():
-        col = encoder.fit_transform(data[colname])
-
-        # Save memory
-        assert len(encoder.classes_) < 10e6, (colname, len(encoder.classes_))
-        col = col.astype(np.int32)
-
-        data[colname] = col
-
-    # Print statistics
-    n_bytes = data.memory_usage().sum()
-    print(f'Loaded {len(data)} rows of session data ({n_bytes/1e6:.2f}MB)')
 
     return data
 
 
-# LabelEncoders for label columns
-label_columns = [
-    'user_id', 'session_id',
-    'action_type', 'platform', 'city', 'device'
-]
+# %% Create the CSV files
+dataframes = {
+    'df_metadata':
+        lambda: get_metadata(),
 
+    'df_sessions_full':
+        lambda: get_sessions(False),
 
-label_columns = {
-    k: LabelEncoder() for k in label_columns
+    'df_sessions_small':
+        lambda: get_sessions(True),
 }
 
 
+for name, df_generator in dataframes.items():
+    print(f'Creating {name}')
 
-#%%
+    # Generate the data
+    df = df_generator()
+
+    # Print statistics
+    n_bytes = df.memory_usage().sum()
+    print(f'    Loaded {len(df)} rows ({n_bytes/1e6:.2f}MB)')
+
+    # Dump it
+    file_name = f'{name}.csv'
+    file_path = cache_dir / file_name
+    df.to_csv(file_path)
+
