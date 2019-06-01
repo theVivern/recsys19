@@ -105,19 +105,19 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
 
     # TODO: Add split for test set
     # This filters sessions with clickouts and then orders those sessions
-    # by their timestamp for first step. The returns the full session of 
+    # by their timestamp for first step. The returns the full session of
     # fracsessions for the earliest timestamps
     if use_subset:
         trainsessionswithclickoutsorted=data_train[data_train.session_id.isin(data_train[['session_id','action_type']][data_train.action_type=='clickout item'].session_id.unique())][['session_id','timestamp','step']][data_train.step==1].sort_values('timestamp').session_id.unique()
         data_train = data_train[data_train.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_sessions)])]
         testsessionswithclickoutsorted=data_test[data_test.session_id.isin(data_test[['session_id','action_type']][data_test.action_type=='clickout item'].session_id.unique())][['session_id','timestamp','step']][data_test.step==1].sort_values('timestamp').session_id.unique()
         data_test = data_test[data_test.session_id.isin(testsessionswithclickoutsorted[0:round(len(testsessionswithclickoutsorted)*frac_sessions)])]
-        
+
     if split_for_fake_test:
         trainsessionswithclickoutsorted=data_train[data_train.session_id.isin(data_train[['session_id','action_type']][data_train.action_type=='clickout item'].session_id.unique())][['session_id','timestamp','step']][data_train.step==1].sort_values('timestamp').session_id.unique()
         data_train_x = data_train[data_train.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_for_fake)])]
         data_train_y = data_train[data_train.session_id.isin(trainsessionswithclickoutsorted[(round(len(trainsessionswithclickoutsorted)*frac_for_fake)+1):len(trainsessionswithclickoutsorted)])]
-        
+
         # add dummy switch for
         data_train_x['fake_split_train'] = True
         data_train_y['fake_split_train'] = False
@@ -129,8 +129,7 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
         data_test['fake_split_train'] = False
 
         del data_train_x, data_train_y
-    
-    
+
     # Merge the dataframes
     data_train['is_train'] = True
     data_test['is_train'] = False
@@ -156,44 +155,41 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
 
 
 # %% Create the CSV files
-dataframes = {
-    'df_metadata':
-        lambda: get_metadata(),
 
-    'df_sessions_full':
-        lambda: get_sessions(False,1,False,1),
-    
-    'df_sessions_full_split':
-        lambda: get_sessions(False,1,True,0.75),
+def create_common_csvs():
+    dataframes = {
+        'df_metadata':
+            lambda: get_metadata(),
 
-    'df_sessions_small':
-        lambda: get_sessions(True,.05,False,1),
+        'df_sessions_full':
+            lambda: get_sessions(False, 1, False, 1),
 
-    'df_sessions_small_split':
-        lambda: get_sessions(True,.05,True,0.75),
-}
+        'df_sessions_full_split':
+            lambda: get_sessions(False, 1, True, 0.75),
 
+        'df_sessions_small':
+            lambda: get_sessions(True, 0.05, False, 1),
 
-print('Generating common CSV datafiles.')
-print(f'They are stored at {cache_dir.resolve()}')
+        'df_sessions_small_split':
+            lambda: get_sessions(True, .05, True, 0.75),
+    }
 
+    print('Generating common CSV datafiles.')
+    print(f'They are stored at {cache_dir.resolve()}')
 
-for name, df_generator in dataframes.items():
-    print(f'Creating {name}')
+    for name, df_generator in dataframes.items():
+        print(f'Creating {name}')
 
-    # Generate the data
-    df = df_generator()
+        # Generate the data
+        df = df_generator()
 
-    # Print statistics
-    n_bytes = df.memory_usage().sum()
-    print(f'    {len(df)} rows, ({n_bytes/1e6:.2f}MB)')
+        # Print statistics
+        n_bytes = df.memory_usage().sum()
+        print(f'    {len(df)} rows, ({n_bytes/1e6:.2f}MB)')
 
-    # Dump it
-    file_name = f'{name}.csv'
-    file_path = cache_dir / file_name
-    df.to_csv(file_path)
-
-
+        # Dump it
+        file_name = f'{name}.csv'
+        file_path = cache_dir / file_name
+        df.to_csv(file_path)
 
 
-#%%
