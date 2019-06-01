@@ -98,16 +98,21 @@ def _read_sessions_csv(csv_path: Path) -> pd.DataFrame:
     return df
 
 @deppy.cache(cache_dir=cache_dir)
-def get_sessions(use_subset: bool):
+def get_sessions(use_subset: bool, frac_sessions: int):
     # Load the data
     data_train = _read_sessions_csv(data_dir / 'train.csv')
     data_test = _read_sessions_csv(data_dir / 'test.csv')
 
-    # TODO: Honor the `use_subset` parameter properly
+    # TODO: Add split for test set
+    # This filters sessions with clickouts and then orders those sessions
+    # by their timestamp for first step. The returns the full session of 
+    # fracsessions for the earliest timestamps
     if use_subset:
-        data_train = data_train.head(50000)
-        data_test = data_test.head(50000)
-
+        trainsessionswithclickoutsorted=data_train[data_train.session_id.isin(data_train[['session_id','action_type']][data_train.action_type=='clickout item'].session_id.unique())][['session_id','timestamp','step']][data_train.step==1].sort_values('timestamp').session_id.unique()
+        data_train = data_train[data_train.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_sessions)])]
+        testsessionswithclickoutsorted=data_test[data_test.session_id.isin(data_test[['session_id','action_type']][data_test.action_type=='clickout item'].session_id.unique())][['session_id','timestamp','step']][data_test.step==1].sort_values('timestamp').session_id.unique()
+        data_test = data_test[data_test.session_id.isin(testsessionswithclickoutsorted[0:round(len(testsessionswithclickoutsorted)*frac_sessions)])]
+        
     # Merge the dataframes
     data_train['is_train'] = True
     data_test['is_train'] = False
@@ -138,10 +143,10 @@ dataframes = {
         lambda: get_metadata(),
 
     'df_sessions_full':
-        lambda: get_sessions(False),
+        lambda: get_sessions(False,1),
 
     'df_sessions_small':
-        lambda: get_sessions(True),
+        lambda: get_sessions(True,.05),
 }
 
 
