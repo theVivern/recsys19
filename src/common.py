@@ -105,7 +105,7 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
 
     # TODO: Add split for test set
     # This filters sessions with clickouts and then orders those sessions
-    # by their timestamp for first step. The returns the full session of 
+    # by their timestamp for first step. The returns the full session of
     # fracsessions for the earliest timestamps
     if use_subset:
         trainsessionswithclickoutsorted=data_train.loc[(data_train.session_id.isin(data_train.loc[data_train.action_type=='clickout item',['session_id','action_type']].session_id.unique())) & (data_train.step==1), ['session_id','timestamp','step']].sort_values('timestamp').session_id.unique()
