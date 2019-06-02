@@ -170,9 +170,9 @@ def process_fake_test(dev, frac_nan: float, seed: int):
     indx_dev_clickouts_sample=np.sort(np.random.choice(indx_dev_clickouts,round(frac_nan*len(indx_dev_clickouts)),replace=False))
     
     # take sampled reference as ground truth (still a string btw)
-    gt=dev.loc[indx_dev_clickouts_sample,'reference']
+    gt=dev.loc[indx_dev_clickouts_sample,'reference'].copy()
     # set same references to np.NaN
-    dev_test=dev
+    dev_test=dev.copy()
     dev_test.loc[indx_dev_clickouts_sample,'reference']=np.NaN
     
     return dev_test, gt
