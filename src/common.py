@@ -103,7 +103,6 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
     data_train = _read_sessions_csv(data_dir / 'train.csv')
     data_test = _read_sessions_csv(data_dir / 'test.csv')
 
-    # TODO: Add split for test set
     # This filters sessions with clickouts and then orders those sessions
     # by their timestamp for first step. The returns the full session of
     # fracsessions for the earliest timestamps
@@ -158,6 +157,26 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
 
     return data
 
+
+# takes the already split is_train==True & fake_split_train==False and creates
+# a ground truth (gt) and dev_test on frac_nan % of sampled clickout references. 
+def process_fake_test(dev, frac_nan: float, seed: int):
+    # Get clickouts indx
+    indx_dev_clickouts=dev.loc[dev.action_type=='clickout item'].index.values.astype(int)
+    
+    # set seed
+    np.random.seed(seed)
+    # sample indx to return frac_nan*len(indx) indexes
+    indx_dev_clickouts_sample=np.sort(np.random.choice(indx_dev_clickouts,round(frac_nan*len(indx_dev_clickouts)),replace=False))
+    
+    # take sampled reference as ground truth (still a string btw)
+    gt=dev.loc[indx_dev_clickouts_sample,'reference']
+    # set same references to np.NaN
+    dev_test=dev
+    dev_test.loc[indx_dev_clickouts_sample,'reference']=np.NaN
+    
+    return dev_test, gt
+    
 
 # # %% Create the CSV files
 # dataframes = {
