@@ -122,14 +122,14 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
         data_train_y = data_train_y.loc[data_train_y.session_id.isin(trainsessionswithclickoutsorted[(round(len(trainsessionswithclickoutsorted)*frac_for_fake)+1):len(trainsessionswithclickoutsorted)])].copy()
 
         # add dummy switch for
-        data_train_x.loc['fake_split_train'] = True
-        data_train_y.loc['fake_split_train'] = False
+        data_train_x.loc['is_validation'] = False
+        data_train_y.loc['is_validation'] = True
         data_train = pd.concat(
             (data_train_y, data_train_x),
             axis=0
         ).copy()
 
-        data_test['fake_split_train'] = False
+        data_test['is_validation'] = False
 
         del data_train_x, data_train_y, trainsessionswithclickoutsorted
 
@@ -185,15 +185,9 @@ def create_common_csvs():
             lambda: get_metadata(),
 
         'df_sessions_full':
-            lambda: get_sessions(False, 1, False, 1),
-
-        'df_sessions_full_split':
             lambda: get_sessions(False, 1, True, 0.75),
 
         'df_sessions_small':
-            lambda: get_sessions(True, 0.05, False, 1),
-
-        'df_sessions_small_split':
             lambda: get_sessions(True, .05, True, 0.75),
     }
 
