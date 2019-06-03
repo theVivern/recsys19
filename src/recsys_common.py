@@ -96,6 +96,20 @@ def _read_sessions_csv(csv_path: Path) -> pd.DataFrame:
 
     return df
 
+def filter_sessions_with_no_clicks(data_train):
+    sessions_with_clickouts = data_train.loc[data_train.action_type=='clickout item','session_id']
+    sessions_with_clickouts
+    data_train=data_train.loc[data_train.session_id.isin(sessions_with_clickouts)].copy()
+    
+    return data_train
+
+def get_unique_session_id(data_train):
+    session_ids_sorted=data_train.loc[data_train.step==1].sort_values('timestamp').session_id.unique()
+    session_ids_sorted
+    
+    return session_ids_sorted
+
+
 @deppy.cache(cache_dir=cache_dir)
 def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool, frac_for_fake: float):
     # Load the data
@@ -106,30 +120,42 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
     # by their timestamp for first step. The returns the full session of
     # fracsessions for the earliest timestamps
     if use_subset:
-        trainsessionswithclickoutsorted=data_train.loc[(data_train.session_id.isin(data_train.loc[data_train.action_type=='clickout item',['session_id','action_type']].session_id.unique())) & (data_train.step==1), ['session_id','timestamp','step']].sort_values('timestamp').session_id.unique()
-        data_train = data_train.loc[data_train.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_sessions)])].copy()
-        testsessionswithclickoutsorted=data_test.loc[(data_test.session_id.isin(data_test.loc[data_test.action_type=='clickout item',['session_id','action_type']].session_id.unique())) & (data_test.step==1), ['session_id','timestamp','step']].sort_values('timestamp').session_id.unique()
-        data_test = data_test.loc[data_test.session_id.isin(testsessionswithclickoutsorted[0:round(len(testsessionswithclickoutsorted)*frac_sessions)])].copy()
+        data_train=filter_sessions_with_no_clicks(data_train)
+        session_ids_sorted = get_unique_session_id(data_train)
+        data_train = data_train.loc[data_train.session_id.isin(session_ids_sorted[0:round(len(session_ids_sorted)*frac_sessions)])].copy()
 
-        del trainsessionswithclickoutsorted, testsessionswithclickoutsorted
+        data_test=filter_sessions_with_no_clicks(data_test)
+        test_session_ids_sorted = get_unique_session_id(data_test)
+        data_test = data_test.loc[data_test.session_id.isin(test_session_ids_sorted[0:round(len(test_session_ids_sorted)*frac_sessions)])].copy()
+
+        del session_ids_sorted, test_session_ids_sorted
 
     if create_validation:
-        trainsessionswithclickoutsorted=data_train.loc[(data_train.session_id.isin(data_train.loc[data_train.action_type=='clickout item',['session_id','action_type']].session_id.unique())) & (data_train.step==1), ['session_id','timestamp','step']].sort_values('timestamp').session_id.unique()
-        col_names = data_train.columns
-        data_train_x[col_names] = data_train.loc[data_train.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_for_fake),col_names])].copy()
-        data_train_y[col_names] = data_train.loc[data_train.session_id.isin(trainsessionswithclickoutsorted[(round(len(trainsessionswithclickoutsorted)*frac_for_fake)+1):len(trainsessionswithclickoutsorted)]),col_names].copy()
+        data_train=filter_sessions_with_no_clicks(data_train)
+        
+        session_ids_sorted = get_unique_session_id(data_train)
+
+        index_for_split=round(len(session_ids_sorted)*(1-frac_for_fake))
+        index_for_split
+
+        data_train_x = data_train.loc[data_train.session_id.isin(session_ids_sorted[0:index_for_split])].copy()
+        print(data_train_x.shape)
+        data_train_x
+        data_train_y = data_train.loc[data_train.session_id.isin(session_ids_sorted[(index_for_split):len(session_ids_sorted)])].copy()
+        print(data_train_y.shape)
+        data_train_y
 
         # add dummy switch for
-        data_train_x.loc['is_validation'] = False
-        data_train_y.loc['is_validation'] = True
+        data_train_x['is_validation'] = False
+        data_train_y['is_validation'] = True
         data_train = pd.concat(
-            (data_train_y, data_train_x),
-            axis=0
-        ).copy()
+            (data_train_x, data_train_y),
+            axis=0,
+        )
 
         data_test['is_validation'] = False
 
-        del data_train_x, data_train_y, trainsessionswithclickoutsorted
+        del data_train_x, data_train_y
 
 
     # Merge the dataframes
@@ -183,10 +209,10 @@ def create_common_csvs():
             lambda: get_metadata(),
 
         'df_sessions_full':
-            lambda: get_sessions(False, 1, True, 0.75),
+            lambda: get_sessions(False, 1, True, 0.25),
 
         'df_sessions_small':
-            lambda: get_sessions(True, .05, True, 0.75),
+            lambda: get_sessions(True, .05, True, 0.25),
     }
 
     print('Generating common CSV datafiles.')
