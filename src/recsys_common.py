@@ -18,7 +18,6 @@ cache_dir = root_dir / 'cache'
 data_meta_path = cache_dir / 'data_meta.h5'
 data_sessions_full_path = cache_dir / 'data_sessions_full.h5'
 data_sessions_small_path = cache_dir / 'data_sessions_small.h5'
-^
 
 import sys
 sys.path.append(str(root_dir / 'src'))
