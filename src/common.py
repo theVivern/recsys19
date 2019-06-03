@@ -113,14 +113,14 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
         data_test = data_test.loc[data_test.session_id.isin(testsessionswithclickoutsorted[0:round(len(testsessionswithclickoutsorted)*frac_sessions)])].copy()
 
         del trainsessionswithclickoutsorted, testsessionswithclickoutsorted
-        
+
     if split_for_fake_test:
         trainsessionswithclickoutsorted=data_train.loc[(data_train.session_id.isin(data_train.loc[data_train.action_type=='clickout item',['session_id','action_type']].session_id.unique())) & (data_train.step==1), ['session_id','timestamp','step']].sort_values('timestamp').session_id.unique()
         data_train_x = data_train
         data_train_x = data_train_x.loc[data_train_x.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_for_fake)])].copy()
         data_train_y = data_train
         data_train_y = data_train_y.loc[data_train_y.session_id.isin(trainsessionswithclickoutsorted[(round(len(trainsessionswithclickoutsorted)*frac_for_fake)+1):len(trainsessionswithclickoutsorted)])].copy()
-        
+
         # add dummy switch for
         data_train_x.loc['fake_split_train'] = True
         data_train_y.loc['fake_split_train'] = False
@@ -132,8 +132,8 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
         data_test['fake_split_train'] = False
 
         del data_train_x, data_train_y, trainsessionswithclickoutsorted
-    
-    
+
+
     # Merge the dataframes
     data_train['is_train'] = True
     data_test['is_train'] = False
@@ -159,61 +159,67 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
 
 
 # takes the already split is_train==True & fake_split_train==False and creates
-# a ground truth (gt) and dev_test on frac_nan % of sampled clickout references. 
+# a ground truth (gt) and dev_test on frac_nan % of sampled clickout references.
 def process_fake_test(dev, frac_nan: float, seed: int):
     # Get clickouts indx
     indx_dev_clickouts=dev.loc[dev.action_type=='clickout item'].index.values.astype(int)
-    
+
     # set seed
     np.random.seed(seed)
     # sample indx to return frac_nan*len(indx) indexes
     indx_dev_clickouts_sample=np.sort(np.random.choice(indx_dev_clickouts,round(frac_nan*len(indx_dev_clickouts)),replace=False))
-    
+
     # take sampled reference as ground truth (still a string btw)
     gt=dev.loc[indx_dev_clickouts_sample,'reference'].copy()
     # set same references to np.NaN
     dev_test=dev.copy()
     dev_test.loc[indx_dev_clickouts_sample,'reference']=np.NaN
-    
+
     return dev_test, gt
-    
-
-# # %% Create the CSV files
-# dataframes = {
-#     # 'df_metadata':
-#     #     lambda: get_metadata(),
-
-#     # 'df_sessions_full':
-#     #     lambda: get_sessions(False,1,False,1),
-    
-#     # 'df_sessions_full_split':
-#     #     lambda: get_sessions(False,1,True,0.75),
-
-#     # 'df_sessions_small':
-#     #     lambda: get_sessions(True,.05,False,1),
-
-#     'df_sessions_small_split':
-#         lambda: get_sessions(True,.1,True,0.75),
-# }
 
 
-# print('Generating common CSV datafiles.')
-# print(f'They are stored at {cache_dir.resolve()}')
+# %% Create the CSV files
+def create_common_csvs():
+    dataframes = {
+        'df_metadata':
+            lambda: get_metadata(),
 
+        'df_sessions_full':
+            lambda: get_sessions(False, 1, False, 1),
 
-# for name, df_generator in dataframes.items():
-#     print(f'Creating {name}')
+        'df_sessions_full_split':
+            lambda: get_sessions(False, 1, True, 0.75),
 
-#     # Generate the data
-#     df = df_generator()
+        'df_sessions_small':
+            lambda: get_sessions(True, 0.05, False, 1),
 
-#     # Print statistics
-#     n_bytes = df.memory_usage().sum()
-#     print(f'    {len(df)} rows, ({n_bytes/1e6:.2f}MB)')
+        'df_sessions_small_split':
+            lambda: get_sessions(True, .05, True, 0.75),
+    }
 
-#     # Dump it
-#     file_name = f'{name}.csv'
-#     file_path = cache_dir / file_name
-#     df.to_csv(file_path)
+    print('Generating common CSV datafiles.')
+    print(f'They are stored at {cache_dir.resolve()}')
+
+    for name, df_generator in dataframes.items():
+        print(f'Creating {name}')
+
+        file_name = f'{name}.csv'
+        file_path = cache_dir / file_name
+
+        # Skip if the file exists
+        if file_path.exists():
+            print('  File exists, skipping')
+            continue
+
+        # Generate the data
+        df = df_generator()
+
+        # Print statistics
+        n_bytes = df.memory_usage().sum()
+        print(f'    {len(df)} rows, ({n_bytes/1e6:.2f}MB)')
+
+        # Dump it
+        print('  Saving CSV')
+        df.to_csv(file_path)
 
 
