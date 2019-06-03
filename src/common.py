@@ -98,7 +98,7 @@ def _read_sessions_csv(csv_path: Path) -> pd.DataFrame:
     return df
 
 @deppy.cache(cache_dir=cache_dir)
-def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool, frac_for_fake: int):
+def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool, frac_for_fake: float):
     # Load the data
     data_train = _read_sessions_csv(data_dir / 'train.csv')
     data_test = _read_sessions_csv(data_dir / 'test.csv')
@@ -114,7 +114,7 @@ def get_sessions(use_subset: bool, frac_sessions: int, split_for_fake_test: bool
 
         del trainsessionswithclickoutsorted, testsessionswithclickoutsorted
 
-    if split_for_fake_test:
+    if create_validation:
         trainsessionswithclickoutsorted=data_train.loc[(data_train.session_id.isin(data_train.loc[data_train.action_type=='clickout item',['session_id','action_type']].session_id.unique())) & (data_train.step==1), ['session_id','timestamp','step']].sort_values('timestamp').session_id.unique()
         data_train_x = data_train
         data_train_x = data_train_x.loc[data_train_x.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_for_fake)])].copy()
