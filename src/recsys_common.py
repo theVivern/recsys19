@@ -115,10 +115,9 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
 
     if create_validation:
         trainsessionswithclickoutsorted=data_train.loc[(data_train.session_id.isin(data_train.loc[data_train.action_type=='clickout item',['session_id','action_type']].session_id.unique())) & (data_train.step==1), ['session_id','timestamp','step']].sort_values('timestamp').session_id.unique()
-        data_train_x = data_train
-        data_train_x = data_train_x.loc[data_train_x.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_for_fake)])].copy()
-        data_train_y = data_train
-        data_train_y = data_train_y.loc[data_train_y.session_id.isin(trainsessionswithclickoutsorted[(round(len(trainsessionswithclickoutsorted)*frac_for_fake)+1):len(trainsessionswithclickoutsorted)])].copy()
+        col_names = data_train.columns
+        data_train_x[col_names] = data_train.loc[data_train.session_id.isin(trainsessionswithclickoutsorted[0:round(len(trainsessionswithclickoutsorted)*frac_for_fake),col_names])].copy()
+        data_train_y[col_names] = data_train.loc[data_train.session_id.isin(trainsessionswithclickoutsorted[(round(len(trainsessionswithclickoutsorted)*frac_for_fake)+1):len(trainsessionswithclickoutsorted)]),col_names].copy()
 
         # add dummy switch for
         data_train_x.loc['is_validation'] = False
@@ -159,7 +158,7 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
 
 # takes the already split is_train==True & fake_split_train==False and creates
 # a ground truth (gt) and dev_test on frac_nan % of sampled clickout references.
-def process_fake_test(dev, frac_nan: float, seed: int):
+def process_validation(dev, frac_nan: float, seed: int):
     # Get clickouts indx
     indx_dev_clickouts=dev.loc[dev.action_type=='clickout item'].index.values.astype(int)
 
