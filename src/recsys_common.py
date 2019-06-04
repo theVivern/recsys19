@@ -182,7 +182,7 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
     return data
 
 
-# takes the already split is_train==True & fake_split_train==False and creates
+# takes the already split is_train==True & is_validation==True and creates
 # a ground truth (gt) and dev_test on frac_nan % of sampled clickout references.
 def process_validation(dev, frac_nan: float, seed: int):
     # Get clickouts indx
