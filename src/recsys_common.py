@@ -194,7 +194,7 @@ def process_validation(dev, frac_nan: float, seed: int):
     indx_dev_clickouts_sample=np.sort(np.random.choice(indx_dev_clickouts,round(frac_nan*len(indx_dev_clickouts)),replace=False))
 
     # take sampled reference as ground truth (still a string btw)
-    gt=dev.loc[indx_dev_clickouts_sample,'reference'].copy()
+    gt=dev.loc[indx_dev_clickouts_sample,['user_id','session_id','timestamp','reference']].copy()
     # set same references to np.NaN
     dev_test=dev.copy()
     dev_test.loc[indx_dev_clickouts_sample,'reference']=np.NaN
