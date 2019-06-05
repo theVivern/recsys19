@@ -185,21 +185,21 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
 # takes the already split is_train==True & is_validation==True and creates
 # a ground truth (gt) and dev_test on frac_nan % of sampled clickout references.
 def process_validation(dev, frac_nan: float, seed: int):
-    # Get clickouts indx
-    indx_dev_clickouts=dev.loc[dev.action_type=='clickout item'].index.values.astype(int)
+    dev['key'] = (dev['session_id'] + '_' + dev['step'].astype(str))
 
-    # set seed
+    last_clickout_in_session=dev.loc[dev.action_type=='clickout item'].groupby('session_id',as_index=False)['step'].max()
+    last_clickout_in_session['key']=(last_clickout_in_session['session_id'] + '_' + last_clickout_in_session['step'].astype(str))
+    
+    n_references=round(frac_nan*len(last_clickout_in_session))
     np.random.seed(seed)
-    # sample indx to return frac_nan*len(indx) indexes
-    indx_dev_clickouts_sample=np.sort(np.random.choice(indx_dev_clickouts,round(frac_nan*len(indx_dev_clickouts)),replace=False))
+    index_sampled_clickouts=np.random.choice(last_clickout_in_session.key,n_references,replace=False)
+    
+    dev['target']=dev.loc[dev.key.isin(index_sampled_clickouts),'reference']
+    dev.loc[dev.key.isin(index_sampled_clickouts),'reference']=np.NaN
 
-    # take sampled reference as ground truth (still a string btw)
-    gt=dev.loc[indx_dev_clickouts_sample,['user_id','session_id','timestamp','reference']].copy()
-    # set same references to np.NaN
-    dev_test=dev.copy()
-    dev_test.loc[indx_dev_clickouts_sample,'reference']=np.NaN
+    dev.drop('key',axis=1,inplace=True)
 
-    return dev_test, gt
+    return dev
 
 
 # %% Create the CSV files
