@@ -98,20 +98,19 @@ def _read_sessions_csv(csv_path: Path) -> pd.DataFrame:
 
 def filter_sessions_with_no_clicks(data_train):
     sessions_with_clickouts = data_train.loc[data_train.action_type=='clickout item','session_id']
-    sessions_with_clickouts
+    
     data_train=data_train.loc[data_train.session_id.isin(sessions_with_clickouts)].copy()
     
     return data_train
 
 def get_unique_session_id(data_train):
     session_ids_sorted=data_train.loc[data_train.step==1].sort_values('timestamp').session_id.unique()
-    session_ids_sorted
     
     return session_ids_sorted
 
 
 @deppy.cache(cache_dir=cache_dir)
-def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool, frac_for_fake: float):
+def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool, frac_validation: float, frac_nan: float, seed: int):
     # Load the data
     data_train = _read_sessions_csv(data_dir / 'train.csv')
     data_test = _read_sessions_csv(data_dir / 'test.csv')
@@ -135,22 +134,19 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
         
         session_ids_sorted = get_unique_session_id(data_train)
 
-        index_for_split=round(len(session_ids_sorted)*(1-frac_for_fake))
-        index_for_split
-
+        index_for_split=round(len(session_ids_sorted)*(1-frac_validation))
+        
         data_train_x = data_train.loc[data_train.session_id.isin(session_ids_sorted[0:index_for_split])].copy()
-        print(data_train_x.shape)
-        data_train_x
+        
         data_train_y = data_train.loc[data_train.session_id.isin(session_ids_sorted[(index_for_split):len(session_ids_sorted)])].copy()
-        print(data_train_y.shape)
-        data_train_y
-
+        
+        
         # add dummy switch for
         data_train_x['is_validation'] = False
         data_train_y['is_validation'] = True
         data_train = pd.concat(
             (data_train_x, data_train_y),
-            axis=0,
+            axis=0
         )
 
         data_test['is_validation'] = False
@@ -167,6 +163,12 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
         axis=0
     )
 
+    data.reset_index(drop=True,inplace=True)
+
+    # remove some references and create ground_truth
+    if create_validation:
+        data=process_validation(data, frac_nan=frac_nan, seed = seed)
+
     del data_train, data_test
     gc.collect()
 
@@ -182,24 +184,29 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
     return data
 
 
-# takes the already split is_train==True & is_validation==True and creates
-# a ground truth (gt) and dev_test on frac_nan % of sampled clickout references.
-def process_validation(dev, frac_nan: float, seed: int):
-    dev['key'] = (dev['session_id'] + '_' + dev['step'].astype(str))
-
-    last_clickout_in_session=dev.loc[dev.action_type=='clickout item'].groupby('session_id',as_index=False)['step'].max()
-    last_clickout_in_session['key']=(last_clickout_in_session['session_id'] + '_' + last_clickout_in_session['step'].astype(str))
+# takes a standard data structure and filters for validation
+# then takes frac_nan*len(last_clickout_in_session) references
+# of last clickout actions per session, moves them to 'ground_truth' col and replaces repference with NaN
+def process_validation(data, frac_nan: float, seed: int):
     
+    data['key'] = (data['session_id'] + '_' + data['step'].astype(str))
+
+    last_clickout_in_session=data.loc[(data.is_validation==True) \
+                                    & (data.action_type=='clickout item')] \
+                                    .groupby('session_id',as_index=False)['step'].max()
+    last_clickout_in_session['key']=(last_clickout_in_session['session_id'] + '_' + last_clickout_in_session['step'].astype(str))
+
     n_references=round(frac_nan*len(last_clickout_in_session))
     np.random.seed(seed)
-    index_sampled_clickouts=np.random.choice(last_clickout_in_session.key,n_references,replace=False)
     
-    dev['target']=dev.loc[dev.key.isin(index_sampled_clickouts),'reference']
-    dev.loc[dev.key.isin(index_sampled_clickouts),'reference']=np.NaN
+    index_sampled_clickouts=np.random.choice(last_clickout_in_session.key,n_references,replace=False)
 
-    dev.drop('key',axis=1,inplace=True)
+    data['target']=data.loc[data.key.isin(index_sampled_clickouts),'reference']
+    data.loc[data.key.isin(index_sampled_clickouts),'reference']=np.NaN
 
-    return dev
+    data.drop('key',axis=1,inplace=True)
+
+    return data
 
 
 # %% Create the CSV files
@@ -209,10 +216,10 @@ def create_common_csvs():
             lambda: get_metadata(),
 
         'df_sessions_full':
-            lambda: get_sessions(False, 1, True, 0.25),
+            lambda: get_sessions(False, 1, True, frac_validation=0.25, frac_nan=1 , seed=1234),
 
         'df_sessions_small':
-            lambda: get_sessions(True, .05, True, 0.25),
+            lambda: get_sessions(True, .05, True, frac_validation=0.25, frac_nan=1 , seed=1234),
     }
 
     print('Generating common CSV datafiles.')
