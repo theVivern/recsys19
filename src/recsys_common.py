@@ -187,7 +187,7 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
 # takes a standard data structure and filters for validation
 # then takes frac_nan*len(last_clickout_in_session) references
 # of last clickout actions per session, moves them to 'ground_truth' col and replaces repference with NaN
-def process_validation(data, frac_validation: float, seed: int):
+def process_validation(data, frac_nan: float, seed: int):
     
     data['key'] = (data['session_id'] + '_' + data['step'].astype(str))
 
