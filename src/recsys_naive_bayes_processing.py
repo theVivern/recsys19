@@ -8,7 +8,7 @@ def process_test_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessio
     data=data.loc[(data.reference.isnull()) | (data.reference.str.contains('^[0-9]*$'))]
     
     # drop unwanted columns
-    data=data.drop(['is_validation','is_train'],axis=1)
+    # data=data.drop(['is_validation','is_train'],axis=1)
     
     # return sessions with clicout with nan reference
     sessions_with_ref_nan = data.loc[data.reference.isnull()].session_id
@@ -61,7 +61,7 @@ def process_test_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessio
         data_wide=data_wide.join(metadata.set_index('item_id'), on=('reference|' + str(i+1)),rsuffix = ('|' + str(i+1)))
     
     # add platform, device
-    platform_device=data.loc[(data.key.isin(data_wide.index)) & (data.step_inverted==0),['key','platform','city','device','timestamp','impressions','prices','target']]
+    platform_device=data.loc[(data.key.isin(data_wide.index)) & (data.step_inverted==0),['key','platform','city','device','impressions','timestamp','target']]
     data_wide=data_wide.join(platform_device.set_index('key'))
 
     # fill na 0
@@ -78,7 +78,7 @@ def process_train_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessi
     data=data.loc[data.reference.str.contains('^[0-9]*$')]
     
     # drop unwanted columns
-    data=data.drop(['is_validation','is_train'],axis=1)
+    # data=data.drop(['is_validation','is_train'],axis=1)
     
     # return sessions with clickout item
     sessions_with_clickout = data.loc[data.action_type=='clickout item'].session_id
@@ -127,7 +127,7 @@ def process_train_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessi
     # data_wide=data_wide[data_wide.columns[data_wide.dtypes=='object']].astype('category')
     
     # Get ground truth
-    y = pd.DataFrame(data_wide['reference|0'])
+    data_wide['y'] = data_wide['reference|0']
     
     # drop actual clickout to predict
     data_wide.drop(['action_type|0','reference|0'],axis=1,inplace=True)
@@ -137,12 +137,12 @@ def process_train_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessi
         data_wide=data_wide.join(metadata.set_index('item_id'), on=('reference|' + str(i+1)),rsuffix = ('|' + str(i+1)))
     
     # add platform, device
-    platform_device=data.loc[(data.key.isin(data_wide.index)) & (data.step_inverted==0),['key','platform','city','device','timestamp','impressions','prices']]
+    platform_device=data.loc[(data.key.isin(data_wide.index)) & (data.step_inverted==0),['key','platform','city','device']]
     data_wide=data_wide.join(platform_device.set_index('key'))
     
     # fill na 0
     data_wide=data_wide.fillna(0)
    
         
-    return data_wide, y
+    return data_wide
 
