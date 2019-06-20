@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-def process_test_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, session_length: int, encode: bool,encoders,cols_to_encode):
+def process_test_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, encoders: dict, config: dict):
     
     # retain only rows with reference nan or numeric
     data=data.loc[(data.reference.isnull()) | (data.reference.str.contains('^[0-9]*$'))]
@@ -39,16 +39,19 @@ def process_test_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessio
     # add inverted step numer
     data['step_inverted']=data['n_group']-data['obs_num']
     # remove all step_inverted greater than session_length
-    data = data.loc[data.step_inverted <= session_length]
+    data = data.loc[data.step_inverted <= config['session_length']]
 
     # encode
-    if encode:
-        for col in cols_to_encode:
+    if list(encoders.keys()) is not None:
+        for col in list(encoders.keys()):
             data[col]=encoders[col].transform(data[col])
     
     
     # generate wide format for each session where steps and references are wide
-    data_wide=data.pivot(index='key',columns='step_inverted',values=['action_type','reference']).copy()
+    if config['add_prices']:
+        data_wide=data.pivot(index='key',columns='step_inverted',values=['action_type','reference','mean_prices']).copy()
+    else:
+        data_wide=data.pivot(index='key',columns='step_inverted',values=['action_type','reference']).copy()
     
     # drop actual clickout to predict
     data_wide.drop(0, axis=1, level=1,inplace=True)
@@ -57,11 +60,12 @@ def process_test_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessio
     data_wide.columns=data_wide.columns.map(lambda x: '|'.join([str(i) for i in x]))
     
     # add metadata for each reference 
-    for i in range(session_length):
+    for i in range(config['session_length']):
         data_wide=data_wide.join(metadata.set_index('item_id'), on=('reference|' + str(i+1)),rsuffix = ('|' + str(i+1)))
     
     # add platform, device
-    platform_device=data.loc[(data.key.isin(data_wide.index)) & (data.step_inverted==0),['key','platform','city','device','impressions','timestamp','target']]
+    platform_device=data.loc[(data.key.isin(data_wide.index)) & (data.step_inverted==0),np.append(config['cols_to_append'],['key','impressions','timestamp','target'])]
+    
     data_wide=data_wide.join(platform_device.set_index('key'))
 
     # fill na 0
@@ -72,7 +76,7 @@ def process_test_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessio
     return data_wide
 
 
-def process_train_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, session_length: int, encode: bool,encoders,cols_to_encode):
+def process_train_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, encoders: dict, config: dict):
     
     # retain only rows with numeric reference
     data=data.loc[data.reference.str.contains('^[0-9]*$')]
@@ -109,16 +113,19 @@ def process_train_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessi
     # add inverted step numer
     data['step_inverted']=data['n_group']-data['obs_num']
     # remove all step_inverted greater than session_length
-    data = data.loc[data.step_inverted <= session_length]
+    data = data.loc[data.step_inverted <= config['session_length']]
 
     # encode
-    if encode:
-        for col in cols_to_encode:
+    if list(encoders.keys()) is not None:
+        for col in list(encoders.keys()):
             data[col]=encoders[col].transform(data[col])
     
     
     # generate wide format for each session where steps and references are wide
-    data_wide=data.pivot(index='key',columns='step_inverted',values=['action_type','reference']).copy()
+    if config['add_prices']:
+        data_wide=data.pivot(index='key',columns='step_inverted',values=['action_type','reference','mean_prices']).copy()
+    else:
+        data_wide=data.pivot(index='key',columns='step_inverted',values=['action_type','reference']).copy()
     
     # collapse column multi index for ease of indexing
     data_wide.columns=data_wide.columns.map(lambda x: '|'.join([str(i) for i in x]))
@@ -130,15 +137,20 @@ def process_train_naives_bayes(data: pd.DataFrame, metadata: pd.DataFrame, sessi
     data_wide['y'] = data_wide['reference|0']
     
     # drop actual clickout to predict
-    data_wide.drop(['action_type|0','reference|0'],axis=1,inplace=True)
+    if config['add_prices']:
+        data_wide.drop(['action_type|0','reference|0','mean_prices|0'],axis=1,inplace=True)
+    else:
+        data_wide.drop(['action_type|0','reference|0'],axis=1,inplace=True)
     
     # add metadata for each reference 
-    for i in range(session_length):
+    for i in range(config['session_length']):
         data_wide=data_wide.join(metadata.set_index('item_id'), on=('reference|' + str(i+1)),rsuffix = ('|' + str(i+1)))
     
     # add platform, device
-    platform_device=data.loc[(data.key.isin(data_wide.index)) & (data.step_inverted==0),['key','platform','city','device']]
-    data_wide=data_wide.join(platform_device.set_index('key'))
+    if config['cols_to_append'] is not None:
+        platform_device=data.loc[(data.key.isin(data_wide.index)) & (data.step_inverted==0),np.append(config['cols_to_append'],['key'])]
+
+        data_wide=data_wide.join(platform_device.set_index('key'))
     
     # fill na 0
     data_wide=data_wide.fillna(0)
