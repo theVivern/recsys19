@@ -55,6 +55,8 @@ def ensemble(frames: List[pd.DataFrame]):
                 old_probs += probs
 
     # Write out
+    print('Generating result')
+
     result = pd.DataFrame(
         columns=['user_id','session_id','timestamp','step','item_recommendations', 'item_probs']
     )
@@ -129,13 +131,23 @@ def main():
     frames = []
 
     for fpath in pth.glob('*.csv'):
+        if fpath.name == 'ensemble.csv':
+            print('Skipping', fpath.name)
+            continue
+
         print('Reading ', fpath.name)
         frame = pd.read_csv(fpath)
+
+        print(' ', len(frame), 'rows')
+
         frames.append(frame)
 
     result = ensemble(frames)
 
-    result.to_csv(pth / 'ensemble.csv')
+    result.to_csv(
+        pth / 'ensemble.csv',
+        index=False
+    )
 
 
 
