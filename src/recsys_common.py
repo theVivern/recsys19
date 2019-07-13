@@ -15,10 +15,6 @@ root_dir = Path().resolve()
 data_dir = root_dir / 'data'
 cache_dir = root_dir / 'cache'
 
-data_meta_path = cache_dir / 'data_meta.h5'
-data_sessions_full_path = cache_dir / 'data_sessions_full.h5'
-data_sessions_small_path = cache_dir / 'data_sessions_small.h5'
-
 import sys
 sys.path.append(str(root_dir / 'src'))
 import deppy
@@ -98,14 +94,14 @@ def _read_sessions_csv(csv_path: Path) -> pd.DataFrame:
 
 def filter_sessions_with_no_clicks(data_train):
     sessions_with_clickouts = data_train.loc[data_train.action_type=='clickout item','session_id']
-    
+
     data_train=data_train.loc[data_train.session_id.isin(sessions_with_clickouts)].copy()
-    
+
     return data_train
 
 def get_unique_session_id(data_train):
     session_ids_sorted=data_train.loc[data_train.step==1].sort_values('timestamp').session_id.unique()
-    
+
     return session_ids_sorted
 
 
@@ -131,16 +127,16 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
 
     if create_validation:
         data_train=filter_sessions_with_no_clicks(data_train)
-        
+
         session_ids_sorted = get_unique_session_id(data_train)
 
         index_for_split=round(len(session_ids_sorted)*(1-frac_validation))
-        
+
         data_train_x = data_train.loc[data_train.session_id.isin(session_ids_sorted[0:index_for_split])].copy()
-        
+
         data_train_y = data_train.loc[data_train.session_id.isin(session_ids_sorted[(index_for_split):len(session_ids_sorted)])].copy()
-        
-        
+
+
         # add dummy switch for
         data_train_x['is_validation'] = False
         data_train_y['is_validation'] = True
@@ -188,7 +184,7 @@ def get_sessions(use_subset: bool, frac_sessions: float, create_validation: bool
 # then takes frac_nan*len(last_clickout_in_session) references
 # of last clickout actions per session, moves them to 'ground_truth' col and replaces repference with NaN
 def process_validation(data, frac_nan: float, seed: int):
-    
+
     data['key'] = (data['session_id'] + '_' + data['step'].astype(str))
 
     last_clickout_in_session=data.loc[(data.is_validation==True) \
@@ -198,7 +194,7 @@ def process_validation(data, frac_nan: float, seed: int):
 
     n_references=round(frac_nan*len(last_clickout_in_session))
     np.random.seed(seed)
-    
+
     index_sampled_clickouts=np.random.choice(last_clickout_in_session.key,n_references,replace=False)
 
     data['target']=data.loc[data.key.isin(index_sampled_clickouts),'reference']
